@@ -9,8 +9,9 @@ samba_tool() {
 
 wait_until_ready() {
   attempt=0
+  # Анонимное чтение rootDSE: bind под Administrator зависит от срока действия пароля, а не от готовности сервера.
   until docker compose exec -T samba sh -c \
-    'LDAPTLS_CACERT=/var/lib/samba/private/panel-tls/ca.pem ldapwhoami -x -H ldaps://localhost -D "Administrator@corp.example.com" -w "$SAMBA_ADMIN_PASSWORD"' \
+    'LDAPTLS_CACERT=/var/lib/samba/private/panel-tls/ca.pem ldapsearch -x -H ldaps://localhost -b "" -s base dnsHostName' \
     >/dev/null 2>&1; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 60 ]; then
@@ -37,7 +38,12 @@ ensure_user() {
     return
   fi
   samba_tool user add "$login" "$@"
-  samba_tool user setexpiry "$login" --noexpiry
+}
+
+# Отдельно от создания: повторный запуск доделает флаг, если прошлый прогон упал между шагами.
+disable_password_expiry() {
+  samba_tool user setexpiry "$1" --noexpiry
+  echo "no password expiry: $1"
 }
 
 ensure_group() {
@@ -70,4 +76,7 @@ ensure_group PanelAdmins "samba-admin administrators"
 ensure_user alice 'Alice-Secret1' --userou=OU=Staff --given-name=Alice --surname=Admin \
   --mail-address=alice@corp.example.com
 ensure_member PanelAdmins alice
+disable_password_expiry Administrator
+disable_password_expiry svc-panel
+disable_password_expiry alice
 copy_ca_certificate

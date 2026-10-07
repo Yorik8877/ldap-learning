@@ -10,7 +10,7 @@ services:
       SAMBA_DOMAIN: CORP
       SAMBA_ADMIN_PASSWORD: Admin-Passw0rd
     ports:
-      - "636:636"
+      - "127.0.0.1:636:636"
     volumes:
       - samba-data:/var/lib/samba
       - samba-config:/etc/samba

@@ -59,14 +59,14 @@ docker compose exec samba sh -c 'LDAPTLS_CACERT=/var/lib/samba/private/panel-tls
 ## Инфраструктура и её упрощения
 
 - Образ — `samba/Dockerfile`: Debian trixie, Samba 4.22. Домен `corp.example.com`, NetBIOS `CORP`, хост `dc1`.
-- Наружу опубликован только 636. OpenLDAP-проект занимает 389 — оба работают одновременно.
+- Наружу опубликован только 636, и только на 127.0.0.1 (Docker обходит файрвол хоста, а пароль Domain Admin лежит в репозитории). OpenLDAP-проект занимает 389 — оба работают одновременно.
 - Сертификат LDAPS выпускает `samba/entrypoint.sh` (свой CA и SAN `localhost`): сертификат,
   который выпускает сама Samba, без SAN, и Go его не примет.
 - Контейнер работает без `--privileged`: ACL файлов Samba хранит в своей базе (`xattr_tdb`).
 - `svc-panel` — участник `Domain Admins`. Это упрощение: в реальном домене сервисному аккаунту
   делегируют права только на нужные OU.
-- Пароли `svc-panel` и `alice` не истекают (`samba-tool user setexpiry --noexpiry`), иначе политика
-  просрочит их через 42 дня.
+- Пароли `Administrator`, `svc-panel` и `alice` не истекают (`samba-tool user setexpiry --noexpiry`),
+  иначе политика просрочит их через 42 дня. `seed.sh` выставляет это при каждом запуске.
 - Сбросить домен целиком: `docker compose down -v`, затем `docker compose up -d --build` и `./seed.sh`.
 
 ## Особенности Samba, проверенные на этом контейнере
