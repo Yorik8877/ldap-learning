@@ -11,9 +11,9 @@ import (
 type Client struct {
 	mu           sync.Mutex
 	ldapURL      string
+	certPath     string
 	bindDN       string
 	bindPassword string
-	certPath     string
 	conn         *ldap.Conn
 }
 
@@ -26,9 +26,9 @@ func NewClient(
 	const op string = "ldap_db.NewClient"
 	c := &Client{
 		ldapURL:      ldapURL,
+		certPath:     certPath,
 		bindDN:       bindDN,
 		bindPassword: bindPassword,
-		certPath:     certPath,
 	}
 	err := c.connect()
 	if err != nil {
