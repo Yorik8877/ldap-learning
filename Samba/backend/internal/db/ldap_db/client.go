@@ -77,7 +77,7 @@ func (c *Client) connection() (*ldap.Conn, error) {
 
 	conn, err := c.dial(c.bindDN, c.bindPassword)
 	if err != nil {
-		return nil, fmt.Errorf("%s: failed to dial: %w", op, err)
+		return nil, fmt.Errorf("%s: failed to dial: %w", op, translateError(err))
 	}
 
 	c.conn = conn

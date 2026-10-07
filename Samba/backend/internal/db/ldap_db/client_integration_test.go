@@ -134,8 +134,8 @@ func TestFailedReconnectReleasesLock(t *testing.T) {
 	correctPassword := client.bindPassword
 	client.bindPassword = "wrong-password"
 	_, err = client.connection()
-	if !ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidCredentials) {
-		t.Fatalf("connection() with wrong password error = %v, want code 49", err)
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("connection() with wrong password error = %v, want ErrInvalidCredentials", err)
 	}
 
 	client.bindPassword = correctPassword
