@@ -19,7 +19,7 @@
 - Ошибки API — `{code, message}`; коды — из таблицы спецификации (`invalid_request`, `unauthorized`, `forbidden`, `not_found`, `already_exists`, `password_policy`, `not_implemented`, `unavailable`, `internal`).
 - Переменные окружения: `HTTP_ADDR`, `LDAP_URL`, `LDAP_CA_FILE`, `LDAP_BIND_DN`, `LDAP_BIND_PASSWORD`, `LDAP_BASE_DN`, `ADMIN_GROUP`, `SESSION_TTL`.
 - Порт бэкенда по умолчанию — `:8081` (спецификация порт не фиксирует; 8080 занят бэкендом OpenLDAP-проекта).
-- Стиль кода — `~/.claude/rules/code_style.md`: без однобуквенных имён и сокращений, guard clauses, комментарии только «почему».
+- Стиль кода: без однобуквенных имён и сокращений, guard clauses, комментарии только «почему».
 
 ## Review Focus
 
