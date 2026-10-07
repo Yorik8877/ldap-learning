@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { LoginView } from '@/features/auth';
+import { DirectoryView } from '@/features/directory';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 import HomeView from '@/views/HomeView.vue';
 import { authGuard } from './guards';
@@ -12,6 +13,7 @@ const routes: RouteRecordRaw[] = [
     component: DefaultLayout,
     children: [
       { path: '', name: 'home', component: HomeView },
+      { path: 'directory', name: 'directory', component: DirectoryView },
     ],
   },
 ];

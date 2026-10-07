@@ -11,6 +11,7 @@ interface NavigationItem {
 
 const NAVIGATION: NavigationItem[] = [
   { title: 'Главная', icon: 'mdi-home', routeName: 'home' },
+  { title: 'Дерево', icon: 'mdi-file-tree', routeName: 'directory' },
 ];
 
 const auth = useAuthStore();
