@@ -60,6 +60,8 @@ func TestNewRejectsInvalidData(t *testing.T) {
 		{name: "too long surname", uid: "jdoe", commonName: "John", surname: strings.Repeat("я", 257)},
 		{name: "not an email", uid: "jdoe", commonName: "John", surname: "Doe", emails: []string{"nope"}},
 		{name: "email with display name", uid: "jdoe", commonName: "John", surname: "Doe", emails: []string{"John <j@example.com>"}},
+		{name: "non-ascii local part", uid: "jdoe", commonName: "John", surname: "Doe", emails: []string{"иван@example.com"}},
+		{name: "non-ascii domain", uid: "jdoe", commonName: "John", surname: "Doe", emails: []string{"ivan@почта.рф"}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {

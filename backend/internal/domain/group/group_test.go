@@ -87,3 +87,12 @@ func TestSoleMemberErrorNamesGroups(t *testing.T) {
 		t.Fatalf("Error() = %q, want group names", err.Error())
 	}
 }
+
+func TestMembershipIsSole(t *testing.T) {
+	if !(group.Membership{Name: "solo", MemberCount: 1}).IsSole() {
+		t.Fatalf("one member must be sole")
+	}
+	if (group.Membership{Name: "team", MemberCount: 2}).IsSole() {
+		t.Fatalf("two members are not sole")
+	}
+}

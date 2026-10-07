@@ -17,12 +17,15 @@ var (
 	ErrUnavailable          = errors.New("ldap: directory unavailable")
 	ErrServiceBind          = errors.New("ldap: service account bind failed")
 	ErrInvalidDN            = errors.New("ldap: invalid dn")
+	ErrInvalidSyntax        = errors.New("ldap: value does not match attribute syntax")
 )
 
 var resultCodeErrors = map[uint16]error{
 	ldap.LDAPResultNoSuchAttribute:        ErrNoSuchValue,
 	ldap.LDAPResultAttributeOrValueExists: ErrValueExists,
+	ldap.LDAPResultInvalidAttributeSyntax: ErrInvalidSyntax,
 	ldap.LDAPResultNoSuchObject:           ErrNoSuchObject,
+	ldap.LDAPResultInvalidDNSyntax:        ErrInvalidDN,
 	ldap.LDAPResultInvalidCredentials:     ErrInvalidCredentials,
 	ldap.LDAPResultBusy:                   ErrUnavailable,
 	ldap.LDAPResultUnavailable:            ErrUnavailable,

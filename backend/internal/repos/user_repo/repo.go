@@ -128,7 +128,7 @@ func mapError(err error) error {
 		return user.ErrNotFound
 	case errors.Is(err, ldap_db.ErrAlreadyExists):
 		return user.ErrAlreadyExists
-	case errors.Is(err, ldap_db.ErrObjectClassViolation):
+	case errors.Is(err, ldap_db.ErrObjectClassViolation), errors.Is(err, ldap_db.ErrInvalidSyntax):
 		return fmt.Errorf("%w: rejected by the directory schema", user.ErrInvalid)
 	case errors.Is(err, ldap_db.ErrUnavailable):
 		return fmt.Errorf("%w: %w", directory.ErrUnavailable, err)

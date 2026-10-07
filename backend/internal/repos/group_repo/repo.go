@@ -108,7 +108,7 @@ func (r *Repo) RemoveMember(ctx context.Context, name group.Name, uid user.UID) 
 
 // GroupsOf читает memberOf пользователя: этот служебный атрибут ведёт оверлей memberof,
 // и в обычном поиске он не возвращается — его надо запросить по имени.
-func (r *Repo) GroupsOf(ctx context.Context, uid user.UID) ([]group.Group, error) {
+func (r *Repo) GroupsOf(ctx context.Context, uid user.UID) ([]group.Membership, error) {
 	entries, err := r.client.Search(ctx, ldap_db.SearchRequest{
 		BaseDN: r.layout.UserDN(uid), Scope: ldap_db.ScopeBase, Attributes: []string{"memberOf"},
 	})
@@ -121,7 +121,7 @@ func (r *Repo) GroupsOf(ctx context.Context, uid user.UID) ([]group.Group, error
 	if len(entries) == 0 {
 		return nil, user.ErrNotFound
 	}
-	return r.groupsByDN(ctx, entries[0].Values("memberOf"))
+	return r.membershipsByDN(ctx, entries[0].Values("memberOf"))
 }
 
 // IsMember использует операцию Compare: сервер отвечает «да/нет», не возвращая записей.
@@ -134,19 +134,27 @@ func (r *Repo) IsMember(ctx context.Context, name group.Name, uid user.UID) (boo
 	return matched, mapError(err)
 }
 
-func (r *Repo) groupsByDN(ctx context.Context, groupDNs []string) ([]group.Group, error) {
-	groups := make([]group.Group, 0, len(groupDNs))
+// membershipsByDN читает группы без доменных правил: имя берётся из cn как есть, а
+// участники только считаются. Иначе одна группа, заведённая в обход админки, ломала бы
+// карточку и удаление всех своих участников.
+func (r *Repo) membershipsByDN(ctx context.Context, groupDNs []string) ([]group.Membership, error) {
+	memberships := make([]group.Membership, 0, len(groupDNs))
 	for _, groupDN := range groupDNs {
-		found, err := r.getByDN(ctx, groupDN)
-		if errors.Is(err, group.ErrNotFound) {
+		entries, err := r.client.Search(ctx, ldap_db.SearchRequest{
+			BaseDN: groupDN, Scope: ldap_db.ScopeBase, Attributes: []string{"cn", membersAttribute},
+		})
+		if errors.Is(err, ldap_db.ErrNoSuchObject) || (err == nil && len(entries) == 0) {
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, mapError(err)
 		}
-		groups = append(groups, found)
+		memberships = append(memberships, group.Membership{
+			Name:        group.Name(entries[0].First("cn")),
+			MemberCount: len(entries[0].Values(membersAttribute)),
+		})
 	}
-	return groups, nil
+	return memberships, nil
 }
 
 func (r *Repo) getByDN(ctx context.Context, dn string) (group.Group, error) {

@@ -4,6 +4,7 @@ package group_repo_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"ldap-admin/internal/domain/group"
@@ -174,5 +175,28 @@ func TestGroupsOfMissingUserIsUserNotFound(t *testing.T) {
 
 	if _, err := f.repo.GroupsOf(t.Context(), "ghost"); !errors.Is(err, user.ErrNotFound) {
 		t.Fatalf("GroupsOf() error = %v, want user.ErrNotFound", err)
+	}
+}
+
+// Группа, заведённая через ldapadd и не проходящая доменные правила, не должна ломать
+// карточку и удаление своих участников: они читают группы через GroupsOf.
+func TestGroupsOfIncludesGroupsBreakingDomainRules(t *testing.T) {
+	f := newFixture(t, "alice", "bob")
+	aliceDN := f.layout.UserDN("alice")
+	f.stand.CreateGroup(t, f.layout.GroupsDN(), "Developers", aliceDN)
+	f.stand.CreateGroup(t, f.layout.GroupsDN(), "Pair", aliceDN, f.layout.UserDN("bob"))
+
+	memberships, err := f.repo.GroupsOf(t.Context(), "alice")
+
+	if err != nil {
+		t.Fatalf("GroupsOf() error = %v", err)
+	}
+	names := make([]string, 0, len(memberships))
+	for _, membership := range memberships {
+		names = append(names, string(membership.Name))
+	}
+	slices.Sort(names)
+	if !slices.Equal(names, []string{"Developers", "Pair"}) {
+		t.Fatalf("GroupsOf() names = %v, want [Developers Pair]", names)
 	}
 }

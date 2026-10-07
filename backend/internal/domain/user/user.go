@@ -5,6 +5,7 @@ import (
 	"net/mail"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -77,7 +78,21 @@ func normalizeEmails(emails []string) ([]string, error) {
 		if err != nil || address.Address != trimmed {
 			return nil, fmt.Errorf("%w: %q is not a valid email address", ErrInvalid, trimmed)
 		}
+		// net/mail принимает адреса в Юникоде, а атрибут mail в схеме LDAP — IA5String,
+		// то есть только ASCII: сервер отверг бы такой адрес.
+		if !isASCII(trimmed) {
+			return nil, fmt.Errorf("%w: %q contains non-ASCII characters, which the directory does not accept", ErrInvalid, trimmed)
+		}
 		normalized = append(normalized, trimmed)
 	}
 	return normalized, nil
+}
+
+func isASCII(value string) bool {
+	for _, character := range value {
+		if character > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
 }

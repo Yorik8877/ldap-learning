@@ -122,6 +122,8 @@ func mapError(err error) error {
 		return nil
 	case errors.Is(err, ldap_db.ErrNoSuchObject):
 		return directory.ErrNotFound
+	case errors.Is(err, ldap_db.ErrInvalidDN):
+		return directory.ErrInvalidDN
 	case errors.Is(err, ldap_db.ErrUnavailable):
 		return fmt.Errorf("%w: %w", directory.ErrUnavailable, err)
 	default:

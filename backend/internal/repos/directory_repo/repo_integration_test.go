@@ -87,4 +87,8 @@ func TestRejectedDNs(t *testing.T) {
 	if _, err := repo.Entry(t.Context(), dnPointer("ou=missing,"+stand.Base)); !errors.Is(err, directory.ErrNotFound) {
 		t.Errorf("Entry(missing) error = %v, want ErrNotFound", err)
 	}
+	// go-ldap разбирает такой DN, а сервер отвечает 34 invalidDNSyntax: атрибута foo нет в схеме.
+	if _, err := repo.Entry(t.Context(), dnPointer("foo=bar,"+stand.Base)); !errors.Is(err, directory.ErrInvalidDN) {
+		t.Errorf("Entry(foo=bar) error = %v, want ErrInvalidDN", err)
+	}
 }

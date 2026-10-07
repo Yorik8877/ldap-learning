@@ -64,23 +64,10 @@ func (f *fakeStore) Delete(_ context.Context, uid user.UID) error {
 	return nil
 }
 
-type fakeGroups map[user.UID][]group.Group
+type fakeGroups map[user.UID][]group.Membership
 
-func (f fakeGroups) GroupsOf(_ context.Context, uid user.UID) ([]group.Group, error) {
+func (f fakeGroups) GroupsOf(_ context.Context, uid user.UID) ([]group.Membership, error) {
 	return f[uid], nil
-}
-
-func mustGroup(t *testing.T, name group.Name, uids ...user.UID) group.Group {
-	t.Helper()
-	members := make([]group.Member, 0, len(uids))
-	for _, uid := range uids {
-		members = append(members, group.Member{UID: uid})
-	}
-	created, err := group.New(name, "", members)
-	if err != nil {
-		t.Fatalf("group.New() error = %v", err)
-	}
-	return created
 }
 
 var john = user.User{UID: "jdoe", CommonName: "John Doe", Surname: "Doe", Emails: []string{}}
@@ -137,7 +124,7 @@ func TestSetPasswordValidatesLength(t *testing.T) {
 func TestGetReturnsGroupNames(t *testing.T) {
 	store := newFakeStore()
 	store.users["jdoe"] = john
-	groups := fakeGroups{"jdoe": {mustGroup(t, "team", "jdoe", "alice")}}
+	groups := fakeGroups{"jdoe": {{Name: "team", MemberCount: 2}}}
 	service := user_service.New(store, groups)
 
 	found, names, err := service.Get(t.Context(), "jdoe")
@@ -162,7 +149,7 @@ func TestDeleteSelfIsRejected(t *testing.T) {
 func TestDeleteSoleMemberIsRejectedWithGroupNames(t *testing.T) {
 	store := newFakeStore()
 	store.users["jdoe"] = john
-	groups := fakeGroups{"jdoe": {mustGroup(t, "solo", "jdoe"), mustGroup(t, "team", "jdoe", "alice")}}
+	groups := fakeGroups{"jdoe": {{Name: "solo", MemberCount: 1}, {Name: "team", MemberCount: 2}}}
 	service := user_service.New(store, groups)
 
 	err := service.Delete(t.Context(), "alice", "jdoe")
@@ -179,7 +166,7 @@ func TestDeleteSoleMemberIsRejectedWithGroupNames(t *testing.T) {
 func TestDeleteRemovesUserSharingGroups(t *testing.T) {
 	store := newFakeStore()
 	store.users["jdoe"] = john
-	groups := fakeGroups{"jdoe": {mustGroup(t, "team", "jdoe", "alice")}}
+	groups := fakeGroups{"jdoe": {{Name: "team", MemberCount: 2}}}
 	service := user_service.New(store, groups)
 
 	if err := service.Delete(t.Context(), "alice", "jdoe"); err != nil {

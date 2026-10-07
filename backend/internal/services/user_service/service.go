@@ -19,7 +19,7 @@ type UserStore interface {
 }
 
 type GroupReader interface {
-	GroupsOf(ctx context.Context, uid user.UID) ([]group.Group, error)
+	GroupsOf(ctx context.Context, uid user.UID) ([]group.Membership, error)
 }
 
 type Service struct {
@@ -85,20 +85,20 @@ func (s *Service) Delete(ctx context.Context, actor, uid user.UID) error {
 	if actor == uid {
 		return user.ErrSelfDelete
 	}
-	groups, err := s.groups.GroupsOf(ctx, uid)
+	memberships, err := s.groups.GroupsOf(ctx, uid)
 	if err != nil {
 		return err
 	}
-	if blocking := soleMemberships(groups, uid); len(blocking) > 0 {
+	if blocking := soleMemberships(memberships); len(blocking) > 0 {
 		return &group.SoleMemberError{Groups: blocking}
 	}
 	return s.users.Delete(ctx, uid)
 }
 
-func soleMemberships(groups []group.Group, uid user.UID) []group.Name {
+func soleMemberships(memberships []group.Membership) []group.Name {
 	var names []group.Name
-	for _, membership := range groups {
-		if membership.IsSoleMember(uid) {
+	for _, membership := range memberships {
+		if membership.IsSole() {
 			names = append(names, membership.Name)
 		}
 	}

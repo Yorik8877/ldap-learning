@@ -61,6 +61,17 @@ func TestCreateGetUpdateDelete(t *testing.T) {
 	}
 }
 
+// Домен уже отсекает такие адреса; тест проверяет страховку на случай, если значение
+// дойдёт до сервера в обход домена: атрибут mail имеет синтаксис IA5String (только ASCII).
+func TestValueRejectedBySchemaSyntaxIsInvalid(t *testing.T) {
+	repo, _ := newRepo(t)
+	bypassingDomain := user.User{UID: "jdoe", CommonName: "John", Surname: "Doe", Emails: []string{"иван@example.com"}}
+
+	if err := repo.Create(t.Context(), bypassingDomain); !errors.Is(err, user.ErrInvalid) {
+		t.Fatalf("Create() error = %v, want ErrInvalid", err)
+	}
+}
+
 func TestCreateDuplicateIsAlreadyExists(t *testing.T) {
 	repo, _ := newRepo(t)
 	john := mustUser(t, "jdoe", "John")
