@@ -1,5 +1,7 @@
 package user_repo
 
+import "samba-admin/internal/domain/user"
+
 // userRecord — пользователь так, как он лежит в AD. Наружу из репозитория не выходит.
 type userRecord struct {
 	DN                 string   `ldap:"dn"`
@@ -21,4 +23,18 @@ var userAttributes = []string{
 	"mail",
 	"userAccountControl",
 	"memberOf",
+}
+
+const accountDisabledFlag = 2
+
+func (ur *userRecord) convertToDomain() (user.User, error) {
+	return user.User{
+		Login:       ur.Login,
+		FirstName:   ur.FirstName,
+		LastName:    ur.LastName,
+		DisplayName: ur.DisplayName,
+		Email:       ur.Email,
+		Enabled:     ur.UserAccountControl&accountDisabledFlag == 0,
+		Groups:      ur.Groups,
+	}, nil
 }
