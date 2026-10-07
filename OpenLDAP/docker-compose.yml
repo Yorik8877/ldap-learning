@@ -1,0 +1,13 @@
+# Имя проекта закреплено: без него compose берёт имя папки, и после переезда
+# в OpenLDAP/ контейнер ldap-openldap-1 (с данными из seed.ldif) потерял бы связь с проектом.
+name: ldap
+
+services:
+  openldap:
+    image: osixia/openldap:1.5.0
+    environment:
+      LDAP_ORGANISATION: "Example"
+      LDAP_DOMAIN: "example.com"
+      LDAP_ADMIN_PASSWORD: "admin"
+    ports:
+      - "389:389"
