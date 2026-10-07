@@ -1,0 +1,20 @@
+name: samba
+
+services:
+  samba:
+    build: ./samba
+    # Имя хоста зашивается в домен при создании; другое имя после пересоздания контейнера сломает DC.
+    hostname: dc1
+    environment:
+      SAMBA_REALM: CORP.EXAMPLE.COM
+      SAMBA_DOMAIN: CORP
+      SAMBA_ADMIN_PASSWORD: Admin-Passw0rd
+    ports:
+      - "636:636"
+    volumes:
+      - samba-data:/var/lib/samba
+      - samba-config:/etc/samba
+
+volumes:
+  samba-data:
+  samba-config:
