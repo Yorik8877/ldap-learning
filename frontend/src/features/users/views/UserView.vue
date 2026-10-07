@@ -57,7 +57,7 @@ watch(() => props.uid, load, { immediate: true });
           <v-list-item title="mail" :subtitle="details.emails.join(', ') || '—'" />
         </v-list>
         <div class="mt-4">Группы — из служебного атрибута memberOf, его ведёт сервер:</div>
-        <v-chip v-for="name in details.groups" :key="name" class="mr-2 mt-2">{{ name }}</v-chip>
+        <v-chip v-for="name in details.groups" :key="name" :to="{ name: 'group', params: { name } }" class="mr-2 mt-2">{{ name }}</v-chip>
         <span v-if="details.groups.length === 0">нет</span>
       </v-card-text>
       <v-card-actions>

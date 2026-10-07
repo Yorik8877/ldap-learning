@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { LoginView } from '@/features/auth';
 import { DirectoryView } from '@/features/directory';
+import { GroupsView, GroupView } from '@/features/groups';
 import { UsersView, UserView } from '@/features/users';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 import HomeView from '@/views/HomeView.vue';
@@ -17,6 +18,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'directory', name: 'directory', component: DirectoryView },
       { path: 'users', name: 'users', component: UsersView },
       { path: 'users/:uid', name: 'user', component: UserView, props: true },
+      { path: 'groups', name: 'groups', component: GroupsView },
+      { path: 'groups/:name', name: 'group', component: GroupView, props: true },
     ],
   },
 ];
