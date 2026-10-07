@@ -48,12 +48,14 @@ base DN `dc=example,dc=com`, администратор каталога `cn=adm
 
 ```
 dc=example,dc=com
-├── cn=admin                      # администратор каталога (создан образом)
 ├── ou=people
 │   └── uid=<uid>                 # objectClass: inetOrgPerson
 └── ou=groups
     └── cn=<name>                 # objectClass: groupOfUniqueNames
 ```
+
+`cn=admin,dc=example,dc=com` — служебная учётная запись сервера (rootdn из его конфигурации).
+Записи с таким DN в дереве нет, поэтому браузер дерева её не показывает.
 
 ### 2.3 Начальные данные — `seed.ldif`
 
@@ -145,7 +147,7 @@ backend/
 **`group`**
 - `Name` — строковый тип, формат как у `UID`.
 - `Member{DN directory.DN, UID user.UID}` — `UID` пустой, если участник вне `ou=people`
-  (например, `cn=admin`).
+  (например, группа, заведённая через `ldapadd`, ссылается на запись из другой ветки).
 - `Group{Name, Description, Members []Member}`; `New` требует минимум одного участника.
 - `(Group) CheckRemoval(uid) error` — `ErrNotMember`, если такого участника нет; `ErrLastMember`,
   если он последний.
