@@ -6,17 +6,22 @@ import (
 	"samba-admin/internal/db/ldap_db"
 )
 
-func mustInitLDAP(cfg *config.Config) (ldap_db.ConnProvider, error) {
-	const op string = "main.mustInitLDAP"
-	connLDAP, err := ldap_db.Connect(
-		cfg.BindDN,
-		cfg.BindPassword,
+type LDAPConnProvider interface {
+	Close() error
+}
+
+func initLDAP(cfg config.Config) (LDAPConnProvider, error) {
+	const op string = "app.initLDAP"
+
+	ldapClient, err := ldap_db.NewClient(
 		cfg.LDAPURL,
 		cfg.LDAPCAFile,
+		cfg.BindDN,
+		cfg.BindPassword,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return connLDAP, nil
+	return ldapClient, nil
 }
