@@ -24,15 +24,23 @@ func newTestHandler() http.Handler {
 	}, silentLogger)
 }
 
-func serve(handler http.Handler, route string) int {
+func serve(handler http.Handler, route string) *httptest.ResponseRecorder {
 	method, path, _ := strings.Cut(route, " ")
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(method, path, nil))
-	return recorder.Code
+	return recorder
 }
 
-// Проверяется только, что маршрут зарегистрирован: тест остаётся верным,
-// когда заглушки заменяются реализацией.
+// Мультиплексор отвечает на незарегистрированный маршрут text/plain, а все
+// обработчики проекта отвечают JSON, поэтому JSON 404 от обработчика не считается ошибкой.
+func isUnregistered(recorder *httptest.ResponseRecorder) bool {
+	isNotFoundOrNotAllowed := recorder.Code == http.StatusNotFound || recorder.Code == http.StatusMethodNotAllowed
+	isJSON := strings.HasPrefix(recorder.Header().Get("Content-Type"), "application/json")
+	return isNotFoundOrNotAllowed && !isJSON
+}
+
+// Маршрут считается зарегистрированным, пока 404/405 не ответил сам роутер:
+// JSON 404 от обработчика (например, пользователь не найден) — законный ответ.
 func TestEveryContractRouteIsRegistered(t *testing.T) {
 	handler := newTestHandler()
 	contract := []string{
@@ -43,9 +51,9 @@ func TestEveryContractRouteIsRegistered(t *testing.T) {
 		"PUT /api/groups/PanelAdmins/members/alice", "DELETE /api/groups/PanelAdmins/members/alice",
 	}
 	for _, route := range contract {
-		status := serve(handler, route)
-		if status == http.StatusNotFound || status == http.StatusMethodNotAllowed {
-			t.Errorf("%s: status = %d, route is not registered", route, status)
+		recorder := serve(handler, route)
+		if isUnregistered(recorder) {
+			t.Errorf("%s: status = %d, route is not registered", route, recorder.Code)
 		}
 	}
 }
@@ -58,8 +66,13 @@ func TestUnknownRoutesAreRejected(t *testing.T) {
 		"GET /api/groups/a/b/c/d": http.StatusNotFound,
 	}
 	for route, want := range cases {
-		if status := serve(handler, route); status != want {
-			t.Errorf("%s: status = %d, want %d", route, status, want)
+		recorder := serve(handler, route)
+		if recorder.Code != want {
+			t.Errorf("%s: status = %d, want %d", route, recorder.Code, want)
+		}
+		if !isUnregistered(recorder) {
+			t.Errorf("%s: response must come from the router, got Content-Type %q",
+				route, recorder.Header().Get("Content-Type"))
 		}
 	}
 }
