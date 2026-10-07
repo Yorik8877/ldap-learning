@@ -8,6 +8,8 @@ AD и Samba, отвечает на вопросы, ревьюит. Код в э�
 Спецификация — `docs/superpowers/specs/2026-10-07-samba-admin-design.md`, план каркаса —
 `docs/superpowers/plans/2026-10-07-samba-admin-skeleton.md`.
 
+**Где остановились и что дальше — `docs/PROGRESS.md`.** Читать в начале каждой сессии, обновлять после заметных шагов.
+
 ## Команды
 
 ```bash
