@@ -1,0 +1,26 @@
+# Начальная структура каталога для админ-панели.
+# Применение: docker exec -i ldap-openldap-1 ldapadd -x -H ldap://localhost \
+#   -D cn=admin,dc=example,dc=com -w admin < seed.ldif
+# Пароль alice: alice-secret
+
+dn: ou=people,dc=example,dc=com
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=example,dc=com
+objectClass: organizationalUnit
+ou: groups
+
+dn: uid=alice,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+uid: alice
+cn: Alice Admin
+sn: Admin
+mail: alice@example.com
+userPassword: {SSHA}HRCWpbXgZuZY1Xy73dbIOQMl3BvO0PIB
+
+dn: cn=admins,ou=groups,dc=example,dc=com
+objectClass: groupOfUniqueNames
+cn: admins
+description: Admin panel access
+uniqueMember: uid=alice,ou=people,dc=example,dc=com
