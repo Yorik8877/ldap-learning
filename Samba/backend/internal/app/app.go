@@ -29,6 +29,13 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+
+	ldapDB, err := mustInitLDAP(&loaded)
+	if err != nil {
+		return err
+	}
+	defer ldapDB.Close()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
