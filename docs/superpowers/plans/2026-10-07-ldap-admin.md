@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Корень репозитория: `/home/valeriy/Documents/matrix/other/ldap`. Бэкенд — `backend/`, фронтенд — `frontend/`.
+- Пути ниже — относительно корня репозитория. Бэкенд — `backend/`, фронтенд — `frontend/`.
 - Go-модуль называется `ldap-admin` (bare path), импорты — `ldap-admin/internal/...`.
 - Слои: зависимости только внутрь. В `internal/domain/` — только stdlib: без `go-ldap`, `net/http`, `slog`, JSON-тегов, `time.Now()`.
 - Порты объявляются в пакете-потребителе (сервисе), реализуются в репозиториях. Конструкторы — `New(...)`.
