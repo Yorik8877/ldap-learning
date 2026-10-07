@@ -16,6 +16,7 @@ docker compose up -d --build     # Samba AD DC, LDAPS на localhost:636; пер
 
 cd backend
 make build | make vet | make test
+make test-integration            # против контейнера Samba, с -race; без Samba тесты пропускаются
 make run                         # читает backend/.env (пример — .env.example), слушает :8081
 ```
 
