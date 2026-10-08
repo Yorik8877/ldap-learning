@@ -1,7 +1,7 @@
 # Ход работы над samba-admin
 
 Документ для продолжения работы с любого места: самому или с другим агентом.
-Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-07, коммит `e1515fb`.
+Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-08, коммит `9fa1652`.
 
 ## Формат работы
 
@@ -32,7 +32,16 @@
   - `FilterEquals(attribute, value)` — собирает `(attribute=value)` и экранирует значение;
   - свои ошибки (`errors.go`): код 49 → `ErrInvalidCredentials`, 32 → `ErrNoSuchObject`,
     200 → `ErrUnavailable` (в том числе при подключении); `translateError` переводит.
-- `internal/repos/user_repo/user_record.go`: `userRecord` с тегами `ldap` и список `userAttributes`.
+- Доменный тип `internal/domain/user`: `user.User` — `Login`, `FirstName`, `LastName`, `DisplayName`,
+  `Email`, `Enabled`, `Groups`. Только stdlib, без тегов и без DN.
+- Репозиторий `internal/repos/user_repo` (пишет автор):
+  - интерфейс `directory` (только `Search`) объявлен в самом репозитории; `New(baseDN, client)`;
+  - `userRecord` с тегами `ldap` и список `userAttributes`; `convertToDomain()` переводит в `user.User`:
+    `Enabled` — бит `accountDisabledFlag` (2) в `userAccountControl` не установлен;
+  - `FindByLogin(login) (user.User, error)`: поиск в `OU=Staff,<base DN>`, `ScopeOneLevel`,
+    `FilterEquals("sAMAccountName", login)`; ноль записей → `ErrUserNotFound`, больше одной →
+    `ErrTooManyUsersByLogin`. Проверено на живой Samba: `alice` находится, `nobody` и `*` → `ErrUserNotFound`,
+    `svc-panel` не виден (он в `CN=Users`, а не в `OU=Staff`).
 
 Принятые решения:
 
@@ -45,14 +54,20 @@
   `ldap_db` не знает про пользователей и группы. Что где лежит в каталоге (OU, имена атрибутов,
   биты `userAccountControl`) знает только репозиторий.
 - **Все рабочие операции — от `svc-panel`.** От имени пользователя — только `Bind` для проверки пароля.
+- **Перевод LDAP → домен делает репозиторий**: домен (слой 0) не знает формат хранения. Когда в домене
+  появится конструктор с проверками (`user.New`), перевод вызывает его.
+- **Репозиторий возвращает значение `user.User`, не указатель.** «Не найден» — только ошибкой, никаких `(nil, nil)`.
+- **DN в домен не попадает.** Проверку пароля по логину делает репозиторий: сам находит DN и делает `Bind`.
+- **Логин в AD не зависит от регистра**: `ALICE` находит `alice`. Дальше по коду использовать логин
+  из найденного пользователя, а не введённый (сессии, проверка «нельзя удалить себя»).
 
 ## Следующие шаги
 
-1. **`FindByLogin(login)` в `user_repo`**: поиск в `OU=Staff,<base DN>`, `ScopeOneLevel`,
-   фильтр `FilterEquals("sAMAccountName", login)`, атрибуты `userAttributes`; ноль записей → «не найден»;
-   `entries[0].Unmarshal(&record)`. Клиент — через интерфейс, объявленный в `user_repo`.
-2. **`VerifyPassword(bindDN, password)`** в `ldap_db`: `dial` + `Close`, ошибка через `translateError`
+1. **`VerifyPassword(bindDN, password)`** в `ldap_db`: `dial` + `Close`, ошибка через `translateError`
    (49 → `ErrInvalidCredentials`); пустой пароль отсекать до LDAP (иначе это анонимный bind).
+   Общее соединение не трогать.
+2. **Проверка пароля по логину в `user_repo`**: найти DN по логину и вызвать `VerifyPassword`;
+   интерфейс `directory` расширить этим методом.
 3. **Сервис входа**: неверный пароль → 401, не в `PanelAdmins` → 403, создание сессии.
 4. **Ручки `Login`/`Me`/`Logout` и настоящий `RequireSession`.**
 5. Дальше — пользователи и группы по контракту API, затем фронтенд.
@@ -64,7 +79,9 @@
 - Поле `certPath` нужно только в конструкторе, хранить его в клиенте незачем.
 - `translateError` возвращает только свою ошибку и теряет текст сервера; `fmt.Errorf("%w: %w", ErrX, err)`
   сохранил бы подробности для лога.
-- В `search.go` остался устаревший комментарий `// TODO: распарсить ошибку...`.
+- `user.User.Groups` пока хранит DN групп (`CN=PanelAdmins,OU=Groups,...`); по контракту API нужны имена.
+- `convertToDomain` всегда возвращает `nil` в качестве ошибки — задел под `user.User` с конструктором;
+  если конструктора не будет, ошибку из сигнатуры убрать.
 - Сброс соединения при сетевой ошибке (`discard`) отложен: `go-ldap` сам помечает разорванное
   соединение (`IsClosing()`), и `connection()` переподключается.
 - Нет таймаутов: подключения (`ldap.DialWithDialer(&net.Dialer{Timeout: ...})`) и запросов
