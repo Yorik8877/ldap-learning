@@ -1,7 +1,7 @@
 # Ход работы над samba-admin
 
 Документ для продолжения работы с любого места: самому или с другим агентом.
-Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-08, коммит `9fa1652`.
+Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-08, коммит `c09e14d`.
 
 ## Формат работы
 
@@ -21,8 +21,13 @@
   - `NewClient(ldapURL, certPath, bindDN, bindPassword)` — читает CA, собирает `tls.Config`,
     сразу подключается от сервисного аккаунта `svc-panel`;
   - `dial(bindDN, password)` — LDAPS-соединение + `Bind` с любыми учётными данными, без сохранения;
+    пустой DN или пароль → `ErrInvalidCredentials` до запроса к серверу (иначе это анонимный bind);
+    при неудачном `Bind` закрывает соединение сам — у вызывающего его нет;
   - `connection()` — под мьютексом отдаёт живое общее соединение или переподключается и сохраняет новое;
-  - `Close()` — под мьютексом.
+  - `Close()` — под мьютексом;
+  - `VerifyPassword(bindDN, password)` — `dial` + `Close` на отдельном соединении, общее не трогает;
+    неверный или пустой пароль → `ErrInvalidCredentials`. Проверено: после проверки пароля общее
+    соединение по-прежнему работает от `CORP\svc-panel`.
 - `internal/app/dbconnect.go`: `initLDAP` создаёт клиент; `app.run` закрывает его через `defer`.
 - Интеграционные тесты клиента: `make test-integration` (нужна запущенная Samba, иначе тесты пропускаются).
 - Поиск в `ldap_db` (пишет автор):
@@ -35,13 +40,18 @@
 - Доменный тип `internal/domain/user`: `user.User` — `Login`, `FirstName`, `LastName`, `DisplayName`,
   `Email`, `Enabled`, `Groups`. Только stdlib, без тегов и без DN.
 - Репозиторий `internal/repos/user_repo` (пишет автор):
-  - интерфейс `directory` (только `Search`) объявлен в самом репозитории; `New(baseDN, client)`;
+  - интерфейс `directory` (`Search`, `VerifyPassword`) объявлен в самом репозитории; `New(baseDN, client)`;
   - `userRecord` с тегами `ldap` и список `userAttributes`; `convertToDomain()` переводит в `user.User`:
     `Enabled` — бит `accountDisabledFlag` (2) в `userAccountControl` не установлен;
   - `FindByLogin(login) (user.User, error)`: поиск в `OU=Staff,<base DN>`, `ScopeOneLevel`,
     `FilterEquals("sAMAccountName", login)`; ноль записей → `ErrUserNotFound`, больше одной →
     `ErrTooManyUsersByLogin`. Проверено на живой Samba: `alice` находится, `nobody` и `*` → `ErrUserNotFound`,
-    `svc-panel` не виден (он в `CN=Users`, а не в `OU=Staff`).
+    `svc-panel` не виден (он в `CN=Users`, а не в `OU=Staff`). Поиск записи вынесен в `findRecordByLogin`
+    (возвращает `userRecord` с DN);
+  - `Authenticate(login, password) (user.User, error)`: `findRecordByLogin` → `VerifyPassword(record.DN, password)`
+    → `convertToDomain()`. Неверный или пустой пароль → `ErrWrongLoginOrPassword` (перевод `ldap_db`-ошибки
+    через `errors.Is` в `translateError`), логин не найден → `ErrUserNotFound`. Проверено на живой Samba:
+    `alice` и `ALICE` с верным паролем → логин `alice`; `nobody` и `svc-panel` → `ErrUserNotFound`.
 
 Принятые решения:
 
@@ -58,19 +68,21 @@
   появится конструктор с проверками (`user.New`), перевод вызывает его.
 - **Репозиторий возвращает значение `user.User`, не указатель.** «Не найден» — только ошибкой, никаких `(nil, nil)`.
 - **DN в домен не попадает.** Проверку пароля по логину делает репозиторий: сам находит DN и делает `Bind`.
+- **Ошибки сравнивать только через `errors.Is`/`errors.As`**: каждый слой оборачивает ошибку через `%w`,
+  поэтому `==` и `switch err` сравнивают внешнюю обёртку и не срабатывают.
+- **Выключенная учётка при `Bind` даёт тот же код 49** — отдельно проверять `Enabled` при входе не нужно.
 - **Логин в AD не зависит от регистра**: `ALICE` находит `alice`. Дальше по коду использовать логин
   из найденного пользователя, а не введённый (сессии, проверка «нельзя удалить себя»).
 
 ## Следующие шаги
 
-1. **`VerifyPassword(bindDN, password)`** в `ldap_db`: `dial` + `Close`, ошибка через `translateError`
-   (49 → `ErrInvalidCredentials`); пустой пароль отсекать до LDAP (иначе это анонимный bind).
-   Общее соединение не трогать.
-2. **Проверка пароля по логину в `user_repo`**: найти DN по логину и вызвать `VerifyPassword`;
-   интерфейс `directory` расширить этим методом.
-3. **Сервис входа**: неверный пароль → 401, не в `PanelAdmins` → 403, создание сессии.
-4. **Ручки `Login`/`Me`/`Logout` и настоящий `RequireSession`.**
-5. Дальше — пользователи и группы по контракту API, затем фронтенд.
+1. **Сервис входа** (`internal/services`): порт с `Authenticate` объявить в сервисе; неверный пароль
+   и «не найден» → одинаковый 401 (чтобы по ответу нельзя было подбирать логины); не в `PanelAdmins` → 403;
+   создание сессии. Перед этим перенести ошибки, на которые реагирует сервис (`ErrUserNotFound`,
+   `ErrWrongLoginOrPassword`), из `user_repo` в домен (`internal/domain/user/errors.go`): сервис не должен
+   импортировать репозиторий. `ErrTooManyUsersByLogin` может остаться в репозитории — для сервиса это 500.
+2. **Ручки `Login`/`Me`/`Logout` и настоящий `RequireSession`.**
+3. Дальше — пользователи и группы по контракту API, затем фронтенд.
 
 ## Отложенные замечания
 
@@ -86,6 +98,11 @@
   соединение (`IsClosing()`), и `connection()` переподключается.
 - Нет таймаутов: подключения (`ldap.DialWithDialer(&net.Dialer{Timeout: ...})`) и запросов
   (`conn.SetTimeout`). Если Samba зависнет, запрос будет ждать вечно.
+- `op` пишется руками и может разойтись с именем функции (один раз уже разошёлся). Решено оставить ручной `op`;
+  если начнёт мешать — писать в обёртке действие (`"find user %q: %w"`), а не имя функции.
+- `user_repo.translateError` — метод `Repo`, хотя `r` не использует; в `FindByLogin` переменная `userRecord`
+  совпадает по имени с типом.
+- В цепочке ошибок `VerifyPassword` дважды встречается «failed to dial».
 - Мелочи из ревью каркаса: лог Samba не виден в `docker compose logs` (нет `--debug-stdout`);
   `server.Run` пишет «listening» до занятия порта; нет теста, что `RequireSession` оборачивает маршруты.
 
