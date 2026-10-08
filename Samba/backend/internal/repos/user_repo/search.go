@@ -32,7 +32,7 @@ func (r *Repo) findRecordByLogin(login string) (userRecord, error) {
 
 	lengthOfRecords := len(records)
 	if lengthOfRecords < 1 {
-		return userRecord{}, fmt.Errorf("%s: %w", op, ErrUserNotFound)
+		return userRecord{}, fmt.Errorf("%s: %w", op, user.ErrNotFound)
 	}
 
 	if lengthOfRecords > 1 {

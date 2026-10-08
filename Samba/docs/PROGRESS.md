@@ -1,7 +1,7 @@
 # Ход работы над samba-admin
 
 Документ для продолжения работы с любого места: самому или с другим агентом.
-Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-08, коммит `c09e14d`.
+Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-08, коммит `0707082` + перенос ошибок в домен.
 
 ## Формат работы
 
@@ -39,6 +39,10 @@
     200 → `ErrUnavailable` (в том числе при подключении); `translateError` переводит.
 - Доменный тип `internal/domain/user`: `user.User` — `Login`, `FirstName`, `LastName`, `DisplayName`,
   `Email`, `Enabled`, `Groups`. Только stdlib, без тегов и без DN.
+- Доменные ошибки `internal/domain/user/errors.go`: `user.ErrNotFound`, `user.ErrWrongLoginOrPassword`.
+  Репозиторий возвращает их; в `user_repo` осталась только внутренняя `ErrTooManyUsersByLogin` (для HTTP — 500).
+- `errorRules` в `internal/api/httpjson`: `user.ErrNotFound` → 404 `not_found`,
+  `user.ErrWrongLoginOrPassword` → 401 `unauthorized`, обе с `detailed: false`.
 - Репозиторий `internal/repos/user_repo` (пишет автор):
   - интерфейс `directory` (`Search`, `VerifyPassword`) объявлен в самом репозитории; `New(baseDN, client)`;
   - `userRecord` с тегами `ldap` и список `userAttributes`; `convertToDomain()` переводит в `user.User`:
@@ -49,9 +53,9 @@
     `svc-panel` не виден (он в `CN=Users`, а не в `OU=Staff`). Поиск записи вынесен в `findRecordByLogin`
     (возвращает `userRecord` с DN);
   - `Authenticate(login, password) (user.User, error)`: `findRecordByLogin` → `VerifyPassword(record.DN, password)`
-    → `convertToDomain()`. Неверный или пустой пароль → `ErrWrongLoginOrPassword` (перевод `ldap_db`-ошибки
-    через `errors.Is` в `translateError`), логин не найден → `ErrUserNotFound`. Проверено на живой Samba:
-    `alice` и `ALICE` с верным паролем → логин `alice`; `nobody` и `svc-panel` → `ErrUserNotFound`.
+    → `convertToDomain()`. Неверный или пустой пароль → `user.ErrWrongLoginOrPassword` (перевод `ldap_db`-ошибки
+    через `errors.Is` в `translateError`), логин не найден → `user.ErrNotFound`. Проверено на живой Samba:
+    `alice` и `ALICE` с верным паролем → логин `alice`; `nobody` и `svc-panel` → «не найден».
 
 Принятые решения:
 
@@ -68,6 +72,9 @@
   появится конструктор с проверками (`user.New`), перевод вызывает его.
 - **Репозиторий возвращает значение `user.User`, не указатель.** «Не найден» — только ошибкой, никаких `(nil, nil)`.
 - **DN в домен не попадает.** Проверку пароля по логину делает репозиторий: сам находит DN и делает `Bind`.
+- **Ошибки, на которые реагируют сервис или HTTP, живут в домене**: сервис не импортирует репозиторий.
+- **`detailed: true` в `errorRules` — только для ошибок без внутренностей** (сейчас лишь `ErrMalformedBody`):
+  иначе клиент получает всю цепочку обёрток с именами функций (`user_repo.Authenticate: ...`).
 - **Ошибки сравнивать только через `errors.Is`/`errors.As`**: каждый слой оборачивает ошибку через `%w`,
   поэтому `==` и `switch err` сравнивают внешнюю обёртку и не срабатывают.
 - **Выключенная учётка при `Bind` даёт тот же код 49** — отдельно проверять `Enabled` при входе не нужно.
@@ -76,13 +83,16 @@
 
 ## Следующие шаги
 
-1. **Сервис входа** (`internal/services`): порт с `Authenticate` объявить в сервисе; неверный пароль
-   и «не найден» → одинаковый 401 (чтобы по ответу нельзя было подбирать логины); не в `PanelAdmins` → 403;
-   создание сессии. Перед этим перенести ошибки, на которые реагирует сервис (`ErrUserNotFound`,
-   `ErrWrongLoginOrPassword`), из `user_repo` в домен (`internal/domain/user/errors.go`): сервис не должен
-   импортировать репозиторий. `ErrTooManyUsersByLogin` может остаться в репозитории — для сервиса это 500.
-2. **Ручки `Login`/`Me`/`Logout` и настоящий `RequireSession`.**
-3. Дальше — пользователи и группы по контракту API, затем фронтенд.
+Сервис входа разбит на части; часть 1 (ошибки в домен) сделана.
+
+1. **Группы именами, а не DN.** В конфиге `ADMIN_GROUP=PanelAdmins`, а в `user.Groups` лежит
+   `CN=PanelAdmins,OU=Groups,...`. Резать DN по запятой нельзя (в имени бывает экранированная запятая);
+   правильно разбирает DN только `go-ldap`, а он живёт в `ldap_db`.
+2. **Сервис входа** (`internal/services`), пока без сессий: порт с `Authenticate` объявить в сервисе;
+   `user.ErrNotFound` при входе заменять на `user.ErrWrongLoginOrPassword` (одинаковый 401, чтобы по ответу
+   нельзя было подбирать логины); не в `ADMIN_GROUP` → 403.
+3. **Сессии, ручки `Login`/`Me`/`Logout` и настоящий `RequireSession`.**
+4. Дальше — пользователи и группы по контракту API, затем фронтенд.
 
 ## Отложенные замечания
 
@@ -91,7 +101,6 @@
 - Поле `certPath` нужно только в конструкторе, хранить его в клиенте незачем.
 - `translateError` возвращает только свою ошибку и теряет текст сервера; `fmt.Errorf("%w: %w", ErrX, err)`
   сохранил бы подробности для лога.
-- `user.User.Groups` пока хранит DN групп (`CN=PanelAdmins,OU=Groups,...`); по контракту API нужны имена.
 - `convertToDomain` всегда возвращает `nil` в качестве ошибки — задел под `user.User` с конструктором;
   если конструктора не будет, ошибку из сигнатуры убрать.
 - Сброс соединения при сетевой ошибке (`discard`) отложен: `go-ldap` сам помечает разорванное
@@ -103,6 +112,8 @@
 - `user_repo.translateError` — метод `Repo`, хотя `r` не использует; в `FindByLogin` переменная `userRecord`
   совпадает по имени с типом.
 - В цепочке ошибок `VerifyPassword` дважды встречается «failed to dial».
+- `ldap_db.ErrUnavailable` пока не доходит до HTTP как 503: `httpjson` не может импортировать `ldap_db`,
+  нужна доменная (или общая) ошибка «каталог недоступен» и перевод в репозитории.
 - Мелочи из ревью каркаса: лог Samba не виден в `docker compose logs` (нет `--debug-stdout`);
   `server.Run` пишет «listening» до занятия порта; нет теста, что `RequireSession` оборачивает маршруты.
 

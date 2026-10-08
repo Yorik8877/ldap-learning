@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"samba-admin/internal/domain/user"
 )
 
 const maxBodyBytes = 1 << 20
@@ -31,6 +32,8 @@ type errorRule struct {
 // Ошибка не из таблицы становится 500 internal: её текст пишется в лог, клиенту не уходит.
 var errorRules = []errorRule{
 	{target: ErrMalformedBody, status: http.StatusBadRequest, code: "invalid_request", detailed: true},
+	{target: user.ErrNotFound, status: http.StatusNotFound, code: "not_found", detailed: false},
+	{target: user.ErrWrongLoginOrPassword, status: http.StatusUnauthorized, code: "unauthorized", detailed: false},
 }
 
 func Write(w http.ResponseWriter, status int, body any) {
