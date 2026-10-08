@@ -4,6 +4,7 @@ import "samba-admin/internal/db/ldap_db"
 
 type directory interface {
 	Search(request ldap_db.SearchRequest) ([]*ldap_db.Entry, error)
+	VerifyPassword(bindDN, password string) error
 }
 
 type Repo struct {
