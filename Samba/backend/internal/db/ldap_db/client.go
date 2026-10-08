@@ -51,6 +51,10 @@ func NewClient(
 func (c *Client) dial(bindDN, bindPassword string) (*ldap.Conn, error) {
 	const op string = "ldap_db.dial"
 
+	if bindDN == "" || bindPassword == "" {
+		return nil, fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+	}
+
 	conn, err := ldap.DialURL(c.ldapURL, ldap.DialWithTLSConfig(c.tlsCfg))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
