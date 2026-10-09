@@ -1,7 +1,7 @@
 # Ход работы над samba-admin
 
 Документ для продолжения работы с любого места: самому или с другим агентом.
-Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-09, коммит `4f7a2ce` (имена групп) + тесты к нему.
+Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-09, коммит `b4e62a8` (сервис входа) + тесты к нему.
 
 ## Формат работы
 
@@ -38,7 +38,15 @@
   а не входная строка. Первая часть без `CN` → `ErrNoCommonName`.
 - Тесты (`make test` — unit, `make test-integration` — против Samba, без неё пропускаются):
   `ldap_db` — соединение и переподключение, `VerifyPassword`, `CommonName` (`dn_test.go`);
-  `user_repo` — `FindByLogin`, `Authenticate` (с группами), `convertToDomain` (`user_record_test.go`).
+  `user_repo` — `FindByLogin`, `Authenticate` (с группами), `convertToDomain` (`user_record_test.go`);
+  `auth_service` — `Login` с подставным `UserAuthenticator` (`login_test.go`, без Samba).
+- Сервис входа `internal/services/auth_service` (пишет автор):
+  - порт `UserAuthenticator` (`Authenticate(login, password)`) объявлен в сервисе, `user_repo.Repo` подходит
+    под него неявно; `New(users, adminGroup)`; в `app` пока не подключён — подключим вместе с ручкой `Login`;
+  - `Login(login, password) (user.User, error)`: сначала пароль, потом группа (иначе 403 без пароля выдал бы,
+    что логин существует); `user.ErrNotFound` → `user.ErrWrongLoginOrPassword` (одинаковый 401);
+    нет `ADMIN_GROUP` в `Groups` (сравнение через `strings.EqualFold`) → `user.ErrNoAdminPrivilege`;
+  - `errorRules`: `user.ErrNoAdminPrivilege` → 403 `forbidden`.
 - Поиск в `ldap_db` (пишет автор):
   - свои типы: `SearchRequest` (база, `Scope`, фильтр, атрибуты) и `Entry` (прячет `*ldap.Entry`,
     методы `DN()` и `Unmarshal(target)` — раскладка по структуре с тегами `ldap:"..."`);
@@ -94,14 +102,11 @@
 
 ## Следующие шаги
 
-Сервис входа разбит на части; части 1 (ошибки в домен) и 2 (имена групп) сделаны.
+Сервис входа (без сессий) готов.
 
-1. **Сервис входа** (`internal/services`), пока без сессий: порт с `Authenticate` объявить в сервисе;
-   `user.ErrNotFound` при входе заменять на `user.ErrWrongLoginOrPassword` (одинаковый 401, чтобы по ответу
-   нельзя было подбирать логины); не в `ADMIN_GROUP` → 403 (имя группы сравнивать через `strings.EqualFold`:
-   имена в AD не зависят от регистра).
-2. **Сессии, ручки `Login`/`Me`/`Logout` и настоящий `RequireSession`.**
-3. Дальше — пользователи и группы по контракту API, затем фронтенд.
+1. **Сессии, ручки `Login`/`Me`/`Logout` и настоящий `RequireSession`.** Заодно собрать цепочку в `app`:
+   `ldap_db` → `user_repo` → `auth_service` → `auth.Handler` (сейчас `initLDAP` отдаёт только `Close()`).
+2. Дальше — пользователи и группы по контракту API, затем фронтенд.
 
 ## Отложенные замечания
 
@@ -116,7 +121,7 @@
   (`conn.SetTimeout`). Если Samba зависнет, запрос будет ждать вечно.
 - `op` пишется руками и может разойтись с именем функции (один раз уже разошёлся). Решено оставить ручной `op`;
   если начнёт мешать — писать в обёртке действие (`"find user %q: %w"`), а не имя функции.
-- `user_repo.translateError` — метод `Repo`, хотя `r` не использует.
+- `user_repo.translateError` и `auth_service.translateLoginError` — методы, хотя получатель не используют.
 - В цепочке ошибок `VerifyPassword` дважды встречается «failed to dial».
 - `ldap_db.ErrUnavailable` пока не доходит до HTTP как 503: `httpjson` не может импортировать `ldap_db`,
   нужна доменная (или общая) ошибка «каталог недоступен» и перевод в репозитории.
