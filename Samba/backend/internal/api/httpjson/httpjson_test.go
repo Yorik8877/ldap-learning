@@ -3,6 +3,7 @@ package httpjson_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"testing"
 
 	"samba-admin/internal/api/httpjson"
+	"samba-admin/internal/domain/session"
+	"samba-admin/internal/domain/user"
 )
 
 var silentLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -70,6 +73,40 @@ func TestWriteErrorMapsMalformedBodyTo400(t *testing.T) {
 	body := decodeBody(t, recorder)
 	if recorder.Code != http.StatusBadRequest || body.Code != "invalid_request" {
 		t.Fatalf("WriteError() = %d %+v, want 400 invalid_request", recorder.Code, body)
+	}
+}
+
+// Доменные ошибки приходят обёрнутыми в цепочку op'ов. Клиент получает статус и код из контракта,
+// а в message — только текст самой доменной ошибки, без имён внутренних функций.
+func TestWriteErrorMapsDomainErrors(t *testing.T) {
+	testCases := []struct {
+		caseName   string
+		domainErr  error
+		wantStatus int
+		wantCode   string
+	}{
+		{"user not found", user.ErrNotFound, http.StatusNotFound, "not_found"},
+		{"wrong login or password", user.ErrWrongLoginOrPassword, http.StatusUnauthorized, "unauthorized"},
+		{"not an admin", user.ErrNoAdminPrivilege, http.StatusForbidden, "forbidden"},
+		{"session not found", session.ErrNotFound, http.StatusUnauthorized, "unauthorized"},
+		{"session expired", session.ErrExpired, http.StatusUnauthorized, "unauthorized"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.caseName, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			wrapped := fmt.Errorf("auth_service.Login: %w", fmt.Errorf("user_repo.Authenticate: %w", testCase.domainErr))
+
+			httpjson.WriteError(recorder, silentLogger, wrapped)
+
+			body := decodeBody(t, recorder)
+			if recorder.Code != testCase.wantStatus || body.Code != testCase.wantCode {
+				t.Fatalf("WriteError() = %d %+v, want %d %s", recorder.Code, body, testCase.wantStatus, testCase.wantCode)
+			}
+			if body.Message != testCase.domainErr.Error() {
+				t.Fatalf("WriteError() message = %q, want %q", body.Message, testCase.domainErr.Error())
+			}
+		})
 	}
 }
 

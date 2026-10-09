@@ -1,7 +1,7 @@
 # Ход работы над samba-admin
 
 Документ для продолжения работы с любого места: самому или с другим агентом.
-Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-09, коммит `f5e90a3` (хранилище сессий) + тест к нему.
+Обновлять при каждом заметном шаге. Последнее обновление — 2026-10-09, коммит `61d3dad` (сессии в сервисе входа) + тесты к нему.
 
 ## Формат работы
 
@@ -39,17 +39,26 @@
 - Тесты (`make test` — unit, `make test-integration` — против Samba, без неё пропускаются):
   `ldap_db` — соединение и переподключение, `VerifyPassword`, `CommonName` (`dn_test.go`);
   `user_repo` — `FindByLogin`, `Authenticate` (с группами), `convertToDomain` (`user_record_test.go`);
-  `auth_service` — `Login` с подставным `UserAuthenticator` (`login_test.go`, без Samba).
+  `auth_service` — `Login`, `Current`, `Logout` без Samba: подставные пользователи, генератор ID и часы,
+  настоящее `session_repo` (`fakes_test.go`, `login_test.go`, `session_test.go`, `logout_test.go`);
+  `httpjson` — статусы и коды всех доменных ошибок, `message` без цепочки `op`.
 - Сервис входа `internal/services/auth_service` (пишет автор):
   - порт `UserAuthenticator` (`Authenticate(login, password)`) объявлен в сервисе, `user_repo.Repo` подходит
     под него неявно; `New(users, adminGroup)`; в `app` пока не подключён — подключим вместе с ручкой `Login`;
-  - `Login(login, password) (user.User, error)`: сначала пароль, потом группа (иначе 403 без пароля выдал бы,
+  - порты `SessionStore` (под него подходит `session_repo`), `IDGenerator` (`NewID() (string, error)`),
+    `Clock` (`Now()`); `New(users, sessionStore, idGenerator, clock, adminGroup, sessionTTL)`;
+  - `Login(login, password) (session.Session, error)`: сначала пароль, потом группа (иначе 403 без пароля выдал бы,
     что логин существует); `user.ErrNotFound` → `user.ErrWrongLoginOrPassword` (одинаковый 401);
     нет `ADMIN_GROUP` в `Groups` (сравнение через `strings.EqualFold`) → `user.ErrNoAdminPrivilege`;
+    затем ID от генератора, сессия `{ID, Login, DisplayName, ExpiresAt = now + TTL}` сохраняется и возвращается
+    (ручке нужны ID для cookie и имя для ответа); при любой неудаче ничего не сохраняется;
+  - `Current(id)`: `Find` (ошибки хранилища — как есть); истёкшая удаляется → `session.ErrExpired`;
+    `Logout(id)` — `Delete`;
   - `errorRules`: `user.ErrNoAdminPrivilege` → 403 `forbidden`.
 - Доменный тип сессии `internal/domain/session` (пишет автор): `Session{ID, Login, DisplayName, ExpiresAt}`;
   `ID` — непрозрачная строка (формат решает генератор, не домен); `IsExpired(now)` — `!now.Before(ExpiresAt)`,
-  ровно в `ExpiresAt` уже истекла; `session.ErrNotFound` («нет или истекла») → 401 `unauthorized`.
+  ровно в `ExpiresAt` уже истекла; `session.ErrNotFound` и `session.ErrExpired` — обе → 401 `unauthorized`
+  (разделены, чтобы в логе было видно, какой случай).
   Тест — `session_test.go`.
 - Хранилище сессий `internal/repos/session_repo` (пишет автор): `map[string]session.Session` под `sync.Mutex`;
   `Save` (повторный — перезапись), `Find` (нет → `session.ErrNotFound`), `Delete` (нет — не ошибка).
@@ -109,13 +118,12 @@
 
 ## Следующие шаги
 
-Сервис входа (без сессий) готов. Сессии разбиты на части; части 1 (доменный тип) и 2 (хранилище) сделаны.
+Сервис входа (без сессий) готов. Сессии разбиты на части; части 1 (доменный тип), 2 (хранилище) и 3 (сервис) сделаны.
 
-1. **Сессии в `auth_service`**: `Login` создаёт сессию, `Current` находит по ID, `Logout` удаляет;
-   генератор ID и часы — порты сервиса.
-2. **HTTP**: ручки `Login`/`Me`/`Logout`, cookie, настоящий `RequireSession`; собрать цепочку в `app`:
-   `ldap_db` → `user_repo` → `auth_service` → `auth.Handler` (сейчас `initLDAP` отдаёт только `Close()`).
-3. Дальше — пользователи и группы по контракту API, затем фронтенд.
+1. **HTTP**: ручки `Login`/`Me`/`Logout`, cookie, настоящий `RequireSession`; собрать цепочку в `app`:
+   `ldap_db` → `user_repo` → `auth_service` → `auth.Handler` (сейчас `initLDAP` отдаёт только `Close()`);
+   настоящие часы и генератор ID (`crypto/rand`, например 32 байта в base64) — реализации портов для `app`.
+2. Дальше — пользователи и группы по контракту API, затем фронтенд.
 
 ## Отложенные замечания
 
@@ -131,6 +139,7 @@
 - `op` пишется руками и может разойтись с именем функции (один раз уже разошёлся). Решено оставить ручной `op`;
   если начнёт мешать — писать в обёртке действие (`"find user %q: %w"`), а не имя функции.
 - `user_repo.translateError` и `auth_service.translateLoginError` — методы, хотя получатель не используют.
+- `auth_service.New` принимает шесть параметров подряд — легко перепутать; можно собрать порты в структуру.
 - В цепочке ошибок `VerifyPassword` дважды встречается «failed to dial».
 - `ldap_db.ErrUnavailable` пока не доходит до HTTP как 503: `httpjson` не может импортировать `ldap_db`,
   нужна доменная (или общая) ошибка «каталог недоступен» и перевод в репозитории.
