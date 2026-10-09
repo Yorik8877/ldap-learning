@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"samba-admin/internal/api/httpjson"
+	"samba-admin/internal/domain/group"
 	"samba-admin/internal/domain/session"
 	"samba-admin/internal/domain/user"
 )
@@ -90,6 +91,7 @@ func TestWriteErrorMapsDomainErrors(t *testing.T) {
 		{"not an admin", user.ErrNoAdminPrivilege, http.StatusForbidden, "forbidden"},
 		{"session not found", session.ErrNotFound, http.StatusUnauthorized, "unauthorized"},
 		{"session expired", session.ErrExpired, http.StatusUnauthorized, "unauthorized"},
+		{"group not found", group.ErrNotFound, http.StatusNotFound, "not_found"},
 	}
 
 	for _, testCase := range testCases {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"samba-admin/internal/domain/group"
 	"samba-admin/internal/domain/session"
 	"samba-admin/internal/domain/user"
 )
@@ -38,6 +39,7 @@ var errorRules = []errorRule{
 	{target: user.ErrNoAdminPrivilege, status: http.StatusForbidden, code: "forbidden", detailed: false},
 	{target: session.ErrNotFound, status: http.StatusUnauthorized, code: "unauthorized", detailed: false},
 	{target: session.ErrExpired, status: http.StatusUnauthorized, code: "unauthorized", detailed: false},
+	{target: group.ErrNotFound, status: http.StatusNotFound, code: "not_found", detailed: false},
 }
 
 func Write(w http.ResponseWriter, status int, body any) {
