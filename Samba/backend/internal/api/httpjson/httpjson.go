@@ -37,6 +37,7 @@ var errorRules = []errorRule{
 	{target: user.ErrWrongLoginOrPassword, status: http.StatusUnauthorized, code: "unauthorized", detailed: false},
 	{target: user.ErrNoAdminPrivilege, status: http.StatusForbidden, code: "forbidden", detailed: false},
 	{target: session.ErrNotFound, status: http.StatusUnauthorized, code: "unauthorized", detailed: false},
+	{target: session.ErrExpired, status: http.StatusUnauthorized, code: "unauthorized", detailed: false},
 }
 
 func Write(w http.ResponseWriter, status int, body any) {
