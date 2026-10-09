@@ -34,6 +34,7 @@ var errorRules = []errorRule{
 	{target: ErrMalformedBody, status: http.StatusBadRequest, code: "invalid_request", detailed: true},
 	{target: user.ErrNotFound, status: http.StatusNotFound, code: "not_found", detailed: false},
 	{target: user.ErrWrongLoginOrPassword, status: http.StatusUnauthorized, code: "unauthorized", detailed: false},
+	{target: user.ErrNoAdminPrivilege, status: http.StatusForbidden, code: "forbidden", detailed: false},
 }
 
 func Write(w http.ResponseWriter, status int, body any) {
