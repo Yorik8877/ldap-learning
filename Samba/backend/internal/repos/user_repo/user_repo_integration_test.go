@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"slices"
 	"testing"
 
 	"samba-admin/internal/db/ldap_db"
@@ -15,6 +16,8 @@ import (
 )
 
 const alicePassword = "Alice-Secret1"
+
+var aliceGroups = []string{"PanelAdmins"}
 
 func settingOr(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
@@ -49,16 +52,17 @@ func TestFindByLogin(t *testing.T) {
 	repo := newStandRepo(t)
 
 	testCases := []struct {
-		caseName  string
-		login     string
-		wantLogin string
-		wantError error
+		caseName   string
+		login      string
+		wantLogin  string
+		wantGroups []string
+		wantError  error
 	}{
-		{"existing user", "alice", "alice", nil},
-		{"login is case-insensitive", "ALICE", "alice", nil},
-		{"unknown login", "nobody", "", user.ErrNotFound},
-		{"filter wildcard is escaped", "*", "", user.ErrNotFound},
-		{"service account outside OU=Staff", "svc-panel", "", user.ErrNotFound},
+		{"existing user", "alice", "alice", aliceGroups, nil},
+		{"login is case-insensitive", "ALICE", "alice", aliceGroups, nil},
+		{"unknown login", "nobody", "", nil, user.ErrNotFound},
+		{"filter wildcard is escaped", "*", "", nil, user.ErrNotFound},
+		{"service account outside OU=Staff", "svc-panel", "", nil, user.ErrNotFound},
 	}
 
 	for _, testCase := range testCases {
@@ -70,6 +74,9 @@ func TestFindByLogin(t *testing.T) {
 			if found.Login != testCase.wantLogin {
 				t.Fatalf("FindByLogin(%q).Login = %q, want %q", testCase.login, found.Login, testCase.wantLogin)
 			}
+			if !slices.Equal(found.Groups, testCase.wantGroups) {
+				t.Fatalf("FindByLogin(%q).Groups = %q, want %q", testCase.login, found.Groups, testCase.wantGroups)
+			}
 		})
 	}
 }
@@ -78,18 +85,19 @@ func TestAuthenticate(t *testing.T) {
 	repo := newStandRepo(t)
 
 	testCases := []struct {
-		caseName  string
-		login     string
-		password  string
-		wantLogin string
-		wantError error
+		caseName   string
+		login      string
+		password   string
+		wantLogin  string
+		wantGroups []string
+		wantError  error
 	}{
-		{"correct password", "alice", alicePassword, "alice", nil},
-		{"login is case-insensitive", "ALICE", alicePassword, "alice", nil},
-		{"wrong password", "alice", "wrong-password", "", user.ErrWrongLoginOrPassword},
-		{"empty password", "alice", "", "", user.ErrWrongLoginOrPassword},
-		{"unknown login", "nobody", "any-password", "", user.ErrNotFound},
-		{"service account outside OU=Staff", "svc-panel", "Svc-Panel-Passw0rd", "", user.ErrNotFound},
+		{"correct password", "alice", alicePassword, "alice", aliceGroups, nil},
+		{"login is case-insensitive", "ALICE", alicePassword, "alice", aliceGroups, nil},
+		{"wrong password", "alice", "wrong-password", "", nil, user.ErrWrongLoginOrPassword},
+		{"empty password", "alice", "", "", nil, user.ErrWrongLoginOrPassword},
+		{"unknown login", "nobody", "any-password", "", nil, user.ErrNotFound},
+		{"service account outside OU=Staff", "svc-panel", "Svc-Panel-Passw0rd", "", nil, user.ErrNotFound},
 	}
 
 	for _, testCase := range testCases {
@@ -100,6 +108,9 @@ func TestAuthenticate(t *testing.T) {
 			}
 			if authenticated.Login != testCase.wantLogin {
 				t.Fatalf("Authenticate(%q).Login = %q, want %q", testCase.login, authenticated.Login, testCase.wantLogin)
+			}
+			if !slices.Equal(authenticated.Groups, testCase.wantGroups) {
+				t.Fatalf("Authenticate(%q).Groups = %q, want %q", testCase.login, authenticated.Groups, testCase.wantGroups)
 			}
 		})
 	}
