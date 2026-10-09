@@ -11,14 +11,31 @@ import (
 	"samba-admin/internal/api/auth"
 	"samba-admin/internal/api/groups"
 	"samba-admin/internal/api/users"
+	"samba-admin/internal/domain/session"
 	"samba-admin/internal/server"
 )
 
 var silentLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
+// rejectingAuthService — сервис входа, у которого нет ни одной сессии. Тестам маршрутов неважно,
+// что ответит обработчик: важно, что отвечает он, а не роутер.
+type rejectingAuthService struct{}
+
+func (rejectingAuthService) Login(_, _ string) (session.Session, error) {
+	return session.Session{}, session.ErrNotFound
+}
+
+func (rejectingAuthService) Current(_ string) (session.Session, error) {
+	return session.Session{}, session.ErrNotFound
+}
+
+func (rejectingAuthService) Logout(_ string) error {
+	return nil
+}
+
 func newTestHandler() http.Handler {
 	return server.NewHandler(server.Handlers{
-		Auth:   auth.New(silentLogger),
+		Auth:   auth.New(silentLogger, rejectingAuthService{}),
 		Users:  users.New(silentLogger),
 		Groups: groups.New(silentLogger),
 	}, silentLogger)
