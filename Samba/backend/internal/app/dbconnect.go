@@ -6,12 +6,8 @@ import (
 	"samba-admin/internal/db/ldap_db"
 )
 
-type LDAPConnProvider interface {
-	Close() error
-}
-
-func initLDAP(cfg config.Config) (LDAPConnProvider, error) {
-	const op string = "app.initLDAP"
+func initLDAPClient(cfg config.Config) (*ldap_db.Client, error) {
+	const op string = "app.initLDAPClient"
 
 	ldapClient, err := ldap_db.NewClient(
 		cfg.LDAPURL,

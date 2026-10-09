@@ -9,11 +9,16 @@ import (
 	"os/signal"
 	"syscall"
 
-	"samba-admin/internal/api/auth"
-	"samba-admin/internal/api/groups"
-	"samba-admin/internal/api/users"
+	authApi "samba-admin/internal/api/auth"
+	groupsApi "samba-admin/internal/api/groups"
+	usersApi "samba-admin/internal/api/users"
 	"samba-admin/internal/config"
+	"samba-admin/internal/lib/clock"
+	"samba-admin/internal/lib/idgen"
+	"samba-admin/internal/repos/session_repo"
+	"samba-admin/internal/repos/user_repo"
 	"samba-admin/internal/server"
+	"samba-admin/internal/services/auth_service"
 )
 
 func Main() {
@@ -30,19 +35,31 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	ldapConn, err := initLDAP(loaded)
+	ldapClient, err := initLDAPClient(loaded)
 	if err != nil {
 		return err
 	}
-	defer ldapConn.Close()
+	defer ldapClient.Close()
+
+	sessions := session_repo.New()
+	users := user_repo.New(loaded.BaseDN, ldapClient)
+
+	authService := auth_service.New(
+		users,
+		sessions,
+		idgen.New(),
+		clock.New(),
+		loaded.AdminGroup,
+		loaded.SessionTTL,
+	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	handler := server.NewHandler(server.Handlers{
-		Auth:   auth.New(logger),
-		Users:  users.New(logger),
-		Groups: groups.New(logger),
+		Auth:   authApi.New(logger, authService),
+		Users:  usersApi.New(logger),
+		Groups: groupsApi.New(logger),
 	}, logger)
 	return server.Run(ctx, loaded.HTTPAddress, handler, logger)
 }

@@ -6,14 +6,22 @@ import (
 	"net/http"
 
 	"samba-admin/internal/api/httpjson"
+	"samba-admin/internal/domain/session"
 )
+
+type authService interface {
+	Current(id string) (session.Session, error)
+	Login(login string, password string) (session.Session, error)
+	Logout(id string) error
+}
 
 type Handler struct {
 	logger *slog.Logger
+	svc    authService
 }
 
-func New(logger *slog.Logger) *Handler {
-	return &Handler{logger: logger}
+func New(logger *slog.Logger, service authService) *Handler {
+	return &Handler{logger: logger, svc: service}
 }
 
 // Login: POST /api/auth/login, тело LoginRequest → 200 CurrentUserResponse + cookie сессии.
