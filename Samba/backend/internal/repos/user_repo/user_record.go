@@ -1,6 +1,10 @@
 package user_repo
 
-import "samba-admin/internal/domain/user"
+import (
+	"fmt"
+	"samba-admin/internal/db/ldap_db"
+	"samba-admin/internal/domain/user"
+)
 
 // userRecord — пользователь так, как он лежит в AD. Наружу из репозитория не выходит.
 type userRecord struct {
@@ -28,6 +32,13 @@ var userAttributes = []string{
 const accountDisabledFlag = 2
 
 func (ur *userRecord) convertToDomain() (user.User, error) {
+	const op string = "user_repo.convertToDomain"
+
+	groups, err := groupNames(ur.Groups)
+	if err != nil {
+		return user.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+
 	return user.User{
 		Login:       ur.Login,
 		FirstName:   ur.FirstName,
@@ -35,6 +46,21 @@ func (ur *userRecord) convertToDomain() (user.User, error) {
 		DisplayName: ur.DisplayName,
 		Email:       ur.Email,
 		Enabled:     ur.UserAccountControl&accountDisabledFlag == 0,
-		Groups:      ur.Groups,
+		Groups:      groups,
 	}, nil
+}
+
+func groupNames(dns []string) ([]string, error) {
+	const op string = "user_repo.groupNames"
+
+	names := make([]string, 0, len(dns))
+	for _, dn := range dns {
+		name, err := ldap_db.CommonName(dn)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+
+		names = append(names, name)
+	}
+	return names, nil
 }

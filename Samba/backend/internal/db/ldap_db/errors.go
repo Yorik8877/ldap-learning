@@ -12,6 +12,9 @@ var (
 	ErrUnavailable        error = errors.New("samba is unavailable")
 
 	ErrUnknownScope error = errors.New("unknown scope was given")
+
+	ErrEmptyDNGiven error = errors.New("empty dn was given")
+	ErrNoCommonName error = errors.New("no common name")
 )
 
 func translateError(err error) error {
